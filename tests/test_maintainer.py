@@ -153,6 +153,7 @@ class MaintainerTests(unittest.TestCase):
         self.assertEqual(self.maintainer.stats.enabled, 1)
 
     def test_process_token_refreshes_when_near_expiry(self):
+        self.maintainer.settings.enable_refresh = True
         near_expiry = (datetime.now(timezone.utc) + timedelta(days=1)).strftime("%Y-%m-%dT%H:%M:%SZ")
         self.maintainer.get_token_detail = Mock(return_value={
             "email": "a@example.com",
@@ -182,6 +183,90 @@ class MaintainerTests(unittest.TestCase):
         self.assertEqual(result, "alive")
         self.maintainer.upload_updated_token.assert_called_once()
         self.assertEqual(self.maintainer.stats.refreshed, 1)
+
+    def test_process_token_does_not_refresh_when_refresh_disabled(self):
+        settings = Settings(
+            cpa_endpoint="https://example.com",
+            cpa_token="secret",
+            quota_threshold=100,
+            expiry_threshold_days=3,
+            enable_refresh=False,
+        )
+        maintainer = CPACodexKeeper(settings=settings, dry_run=True)
+        near_expiry = (datetime.now(timezone.utc) + timedelta(days=1)).strftime("%Y-%m-%dT%H:%M:%SZ")
+        maintainer.get_token_detail = Mock(return_value={
+            "email": "a@example.com",
+            "disabled": False,
+            "access_token": "token",
+            "refresh_token": "rt",
+            "account_id": "acc",
+            "expired": near_expiry,
+        })
+        maintainer.check_token_live = Mock(return_value=(200, {
+            "json": {
+                "plan_type": "team",
+                "rate_limit": {
+                    "primary_window": {"used_percent": 0, "limit_window_seconds": 18000},
+                    "secondary_window": {"used_percent": 0, "limit_window_seconds": 604800},
+                },
+                "credits": {"has_credits": False},
+            }
+        }))
+        maintainer.try_refresh = Mock(return_value=(True, {
+            "access_token": "new-token",
+            "refresh_token": "new-rt",
+            "expired": "2099-03-01T00:00:00Z",
+        }, "刷新成功"))
+        maintainer.upload_updated_token = Mock(return_value=True)
+
+        result = maintainer.process_token({"name": "t4-disabled"}, 1, 1)
+
+        self.assertEqual(result, "alive")
+        maintainer.try_refresh.assert_not_called()
+        maintainer.upload_updated_token.assert_not_called()
+        self.assertEqual(maintainer.stats.refreshed, 0)
+
+    def test_process_token_refreshes_when_refresh_enabled(self):
+        settings = Settings(
+            cpa_endpoint="https://example.com",
+            cpa_token="secret",
+            quota_threshold=100,
+            expiry_threshold_days=3,
+            enable_refresh=True,
+        )
+        maintainer = CPACodexKeeper(settings=settings, dry_run=True)
+        near_expiry = (datetime.now(timezone.utc) + timedelta(days=1)).strftime("%Y-%m-%dT%H:%M:%SZ")
+        maintainer.get_token_detail = Mock(return_value={
+            "email": "a@example.com",
+            "disabled": False,
+            "access_token": "token",
+            "refresh_token": "rt",
+            "account_id": "acc",
+            "expired": near_expiry,
+        })
+        maintainer.check_token_live = Mock(return_value=(200, {
+            "json": {
+                "plan_type": "team",
+                "rate_limit": {
+                    "primary_window": {"used_percent": 0, "limit_window_seconds": 18000},
+                    "secondary_window": {"used_percent": 0, "limit_window_seconds": 604800},
+                },
+                "credits": {"has_credits": False},
+            }
+        }))
+        maintainer.try_refresh = Mock(return_value=(True, {
+            "access_token": "new-token",
+            "refresh_token": "new-rt",
+            "expired": "2099-03-01T00:00:00Z",
+        }, "刷新成功"))
+        maintainer.upload_updated_token = Mock(return_value=True)
+
+        result = maintainer.process_token({"name": "t4-enabled"}, 1, 1)
+
+        self.assertEqual(result, "alive")
+        maintainer.try_refresh.assert_called_once()
+        maintainer.upload_updated_token.assert_called_once()
+        self.assertEqual(maintainer.stats.refreshed, 1)
 
     def test_process_token_deletes_expired_token_without_refresh_token(self):
         self.maintainer.get_token_detail = Mock(return_value={

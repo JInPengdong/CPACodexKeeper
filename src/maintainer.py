@@ -230,6 +230,13 @@ class CPACodexKeeper:
     def _apply_refresh_policy(self, name, token_detail, remaining_seconds, remaining_str, logger):
         expiry_threshold_seconds = self.settings.expiry_threshold_days * 86400
         if remaining_seconds > 0 and remaining_seconds < expiry_threshold_seconds:
+            if not self.settings.enable_refresh:
+                logger.log(
+                    "INFO",
+                    f"剩余 {remaining_str} < {self.settings.expiry_threshold_days} 天，但刷新功能已关闭",
+                    indent=1,
+                )
+                return
             logger.log("WARN", f"剩余 {remaining_str} < {self.settings.expiry_threshold_days} 天，准备刷新", indent=1)
             success, new_data, msg = self.try_refresh(token_detail)
             if success:
@@ -301,6 +308,7 @@ class CPACodexKeeper:
         self.log("INFO", f"API: {self.settings.cpa_endpoint}")
         self.log("INFO", f"Quota threshold: {self.settings.quota_threshold}% (disable when reached)")
         self.log("INFO", f"Expiry threshold: {self.settings.expiry_threshold_days} days (refresh when below)")
+        self.log("INFO", f"Refresh enabled: {self.settings.enable_refresh}")
         if self.dry_run:
             self.log("DRY", "演练模式 (不实际修改)")
         self.logger.divider()

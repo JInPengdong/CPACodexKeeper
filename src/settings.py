@@ -10,6 +10,7 @@ DEFAULT_USAGE_TIMEOUT_SECONDS = 15
 DEFAULT_CPA_TIMEOUT_SECONDS = 30
 DEFAULT_MAX_RETRIES = 2
 DEFAULT_WORKER_THREADS = 8
+DEFAULT_ENABLE_REFRESH = False
 PROJECT_ENV_FILE = Path(__file__).resolve().parents[1] / ".env"
 
 
@@ -29,6 +30,7 @@ class Settings:
     cpa_timeout_seconds: int = DEFAULT_CPA_TIMEOUT_SECONDS
     max_retries: int = DEFAULT_MAX_RETRIES
     worker_threads: int = DEFAULT_WORKER_THREADS
+    enable_refresh: bool = DEFAULT_ENABLE_REFRESH
 
 
 def _read_project_env_file(env_file: Path | None = None) -> dict[str, str]:
@@ -74,6 +76,18 @@ def _read_int(name: str, default: int, env_values: dict[str, str], *, minimum: i
     return value
 
 
+def _read_bool(name: str, default: bool, env_values: dict[str, str]) -> bool:
+    raw = _get_config_value(name, env_values)
+    if raw in (None, ""):
+        return default
+    normalized = raw.strip().lower()
+    if normalized in {"1", "true", "yes", "on"}:
+        return True
+    if normalized in {"0", "false", "no", "off"}:
+        return False
+    raise SettingsError(f"{name} must be a boolean")
+
+
 def load_settings(env_file: Path | None = None) -> Settings:
     env_values = _read_project_env_file(env_file)
     endpoint = (_get_config_value("CPA_ENDPOINT", env_values) or "").strip().rstrip("/")
@@ -98,4 +112,5 @@ def load_settings(env_file: Path | None = None) -> Settings:
         cpa_timeout_seconds=_read_int("CPA_HTTP_TIMEOUT", DEFAULT_CPA_TIMEOUT_SECONDS, env_values, minimum=1),
         max_retries=_read_int("CPA_MAX_RETRIES", DEFAULT_MAX_RETRIES, env_values, minimum=0, maximum=5),
         worker_threads=_read_int("CPA_WORKER_THREADS", DEFAULT_WORKER_THREADS, env_values, minimum=1),
+        enable_refresh=_read_bool("CPA_ENABLE_REFRESH", DEFAULT_ENABLE_REFRESH, env_values),
     )
